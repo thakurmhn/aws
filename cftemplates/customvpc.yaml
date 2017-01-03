@@ -1,0 +1,197 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Custom VPC: public and private subnets in two availability zones'
+
+
+Resources:
+  CustomVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Sub '10.10.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: 'Custom_VPC'
+  CustomVPCInternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+      - Key: Name
+        Value: 'IG_CustomVPC'
+  CustomVPCGatewayAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref CustomVPC
+      InternetGatewayId: !Ref CustomVPCInternetGateway
+  CustomVPCSubnetAPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: '10.10.0.0/24'
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref CustomVPC
+      Tags:
+      - Key: Name
+        Value: 'PublicSunet A'
+  CustomVPCSubnetAPrivate:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: '10.10.1.0/24'
+      VpcId: !Ref CustomVPC
+      Tags:
+      - Key: Name
+        Value: 'PrivateSubnet A'
+  CustomVPCSubnetBPrivate:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: '10.10.2.0/24'
+      VpcId: !Ref CustomVPC
+      Tags:
+      - Key: Name
+        Value: 'PrivateSubnet B'
+  CustomVPCSubnetBPublic:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: '10.10.4.0/24'
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref CustomVPC
+      Tags:
+      - Key: Name
+        Value: 'PublicSubnet B'
+  RouteTablePublic:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref CustomVPC
+      Tags:
+      - Key: Name
+        Value: Public
+  RouteTablePrivate:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref CustomVPC
+      Tags:
+      - Key: Name
+        Value: Private
+  RouteTableAssociationAPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref CustomVPCSubnetAPublic
+      RouteTableId: !Ref RouteTablePublic
+  RouteTableAssociationAPrivate:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref CustomVPCSubnetAPrivate
+      RouteTableId: !Ref RouteTablePrivate
+  RouteTableAssociationAPrivate:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref CustomVPCSubnetBPrivate
+      RouteTableId: !Ref RouteTablePrivate
+  RouteTableAssociationAPublic:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref CustomVPCSubnetBPublic
+      RouteTableId: !Ref RouteTablePublic
+  RouteTablePublicInternetRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: CustomVPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTablePublic
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref CustomVPCInternetGateway
+  NetworkAclPublic:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref CustomVPC
+      Tags:
+      - Key: Name
+        Value: PublicACL
+  NetworkAclPrivate:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref CustomVPC
+      Tags:
+      - Key: Name
+        Value: PrivateACL
+  SubnetNetworkAclAssociationAPublic:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref CustomVPCSubnetAPublic
+      NetworkAclId: !Ref NetworkAclPublic
+  SubnetNetworkAclAssociationAPrivate:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref CustomVPCSubnetAPrivate
+      NetworkAclId: !Ref NetworkAclPrivate
+  SubnetNetworkAclAssociationBPrivate:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref CustomVPCSubnetBPrivate
+      NetworkAclId: !Ref NetworkAclPrivate
+  SubnetNetworkAclAssociationBPublic:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref CustomVPCSubnetBPublic
+      NetworkAclId: !Ref NetworkAclPublic
+  NetworkAclEntryInPublicAllowAll:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryOutPublicAllowAll:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPublic
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryInPrivateAllowVPC:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: false
+      CidrBlock: '0.0.0.0/0'
+  NetworkAclEntryOutPrivateAllowVPC:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NetworkAclPrivate
+      RuleNumber: 99
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: '0.0.0.0/0'
+Outputs:
+  CustomVPC:
+    Description: 'CustomVPC'
+    Value: !Ref CustomVPC
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomVPC'
+  CustomVPCSubnetAPublic:
+    Description: 'CustomVPC subnet A public'
+    Value: !Ref CustomVPCSubnetAPublic
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomVPCSubnetAPublic'
+  CustomVPCSubnetBPublic:
+    Description: 'CustomVPC subnet B public'
+    Value: !Ref CustomVPCSubnetBPublic
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomVPCSubnetBPublic'
+  CustomVPCSubnetAPrivate:
+    Description: 'CustomVPC subnet B private'
+    Value: !Ref CustomVPCSubnetAPrivate
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomVPCSubnetAPrivate'
